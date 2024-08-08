@@ -1,0 +1,124 @@
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.chrome.service import Service
+import pandas as pd
+from datetime import datetime
+from selenium.webdriver.support import expected_conditions as EC
+import matplotlib.pyplot as plt
+
+chrome_options = Options()
+chrome_options.add_argument('--headless=new')
+
+# Specify path if ChromeDriver is not in the PATH
+service = Service(executable_path=r"C:\Users\Karolina\chromedriver-win64\chromedriver-win64\chromedriver.exe")
+
+# Initialize WebDriver with path
+driver = webdriver.Chrome(options=chrome_options, service=service)
+
+websites = [
+    {
+        'url': "https://covid.cdc.gov/covid-data-tracker/#datatracker-home",
+        'name': "CDC Data Tracker",
+        'selectors': [
+            "#sb-test-trends", "#sb-test-trends-week", "#sb-test-trends-description",
+            "#sb-ed-trends", "#sb-ed-trends-week", "#sb-ed-trends-week-description",
+            "#sb-hosp-trends", "#sb-hosp-trends-week", "#sb-hosp-trends-week-description",
+            "#sb-death-trends", "#sb-death-trends-week", "#sb-death-trends-week-description"
+        ]
+    },
+    {
+        'url': "https://covid.cdc.gov/covid-data-tracker/#maps_percent-covid-ed",
+        'name': "CDC Maps - Percent COVID ED",
+        'selectors': [
+            "#mapTitle", ".stat-card", ".stat-name", ".stat-value",
+            ".info-tooltip", ".legend-container"
+        ]
+    }
+]
+
+covid_data = []
+
+for site in websites:
+    try:
+        driver.get(site['url'])
+        WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.CSS_SELECTOR, site['selectors'][0])))
+
+        for selector in site['selectors']:
+            try:
+                element = WebDriverWait(driver, 30).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, selector)))  # Using CSS Selector
+                text = element.text.strip()
+
+                if not text:
+                    text = element.get_attribute("innerHTML").strip()
+                print(f"Extracted content from {site['name']} using selector '{selector}': {text}")
+
+                data_entry = {
+                    'Website': site['name'],
+                    'Timestamp': datetime.now(),
+                    'Selector': selector,
+                    'Content': text
+                }
+                covid_data.append(data_entry)
+            except TimeoutException:
+                print(f"Timeout waiting for elements using selector '{selector}' for {site['name']}")
+    except Exception as e:
+        print(f"Error scraping {site['url']}: {e}")
+
+# Create DataFrame
+df = pd.DataFrame(covid_data)
+
+# Filter for homepage data
+homepage_data = df[df['Website'] == "CDC Data Tracker"]
+
+# Extract and process data
+metrics_mapping = {
+    "#sb-test-trends": "Test Positivity",
+    "#sb-test-trends-description": "Test Positivity",
+    "#sb-ed-trends": "ED Visits Due to COVID",
+    "#sb-ed-trends-week-description": "ED Visits Due to COVID",
+    "#sb-hosp-trends": "Hospitalizations",
+    "#sb-hosp-trends-week-description": "Hospitalizations",
+    "#sb-death-trends": "Deaths Due to COVID",
+    "#sb-death-trends-week-description": "Deaths Due to COVID"
+}
+
+plot_data = {"Metric": [], "Week": [], "Percentage": []}
+
+for _, row in homepage_data.iterrows():
+    selector, content = row['Selector'], row['Content']
+    if selector in metrics_mapping:
+        metric = metrics_mapping[selector]
+        if "description" in selector:
+            week = "Previous Week"
+            percentage = float(content.split()[-1].strip('%'))
+        else:
+            week = "Current Week"
+            percentage = float(content.strip('%'))
+
+        plot_data["Metric"].append(metric)
+        plot_data["Week"].append(week)
+        plot_data["Percentage"].append(percentage)
+
+# Create DataFrame for plotting
+plot_df = pd.DataFrame(plot_data)
+
+# Create line graph using matplotlib
+plt.figure(figsize=(10, 6))
+
+for metric in plot_df['Metric'].unique():
+    metric_data = plot_df[plot_df['Metric'] == metric]
+    plt.plot(metric_data['Week'], metric_data['Percentage'], marker='o', label=metric)
+
+plt.title('COVID-19 Statistics Trend')
+plt.xlabel('Week')
+plt.ylabel('Percentage')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Close the WebDriver when done
+driver.quit()
