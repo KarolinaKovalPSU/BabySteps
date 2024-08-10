@@ -13,7 +13,7 @@ chrome_options = Options()
 chrome_options.add_argument('--headless=new')
 
 # Specify path if ChromeDriver is not in the PATH
-service = Service(executable_path=r"C:\Users\Karolina\chromedriver-win64\chromedriver-win64\chromedriver.exe")
+service = Service(executable_path=r"C:\Users\your-path-to-chrome-driver\chromedriver.exe")
 
 # Initialize WebDriver with path
 driver = webdriver.Chrome(options=chrome_options, service=service)
